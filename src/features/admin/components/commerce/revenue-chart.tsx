@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+
 type DataPoint = { month: string; amount: number; orders: number };
 
 export function RevenueChart({ data }: { data: DataPoint[] }) {
@@ -33,10 +34,10 @@ export function RevenueChart({ data }: { data: DataPoint[] }) {
             borderRadius: "10px",
             fontSize: "12px",
           }}
-          formatter={(value: number) => [
-            `₹${value.toLocaleString("en-IN")}`,
-            "Revenue",
-          ]}
+         formatter={(value) => [
+  `₹${Number(value).toLocaleString("en-IN")}`,
+  "Revenue",
+]}
         />
         <Bar dataKey="amount" fill="#1d4ed8" radius={[6, 6, 0, 0]} />
       </BarChart>
