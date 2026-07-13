@@ -35,6 +35,7 @@ export async function GET(
       select: {
         id: true,
         title: true,
+        authorId: true,
         slug: true,
         excerpt: true,
         content: true,
