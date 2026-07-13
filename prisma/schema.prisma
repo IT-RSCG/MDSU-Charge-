@@ -1,0 +1,672 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+//Enums
+enum Role {
+  STUDENT    
+  FACULTY    
+  CMS_EDITOR 
+  ADMIN      
+}
+
+// ── V3 Enums ─────────────────────────────────────────────────
+
+// Course access duration — kitne time tak course accessible rahega purchase ke baad
+enum AccessDuration {
+  FIFTEEN_DAYS    
+  ONE_MONTH       
+  THREE_MONTHS    
+  SIX_MONTHS      
+  ONE_YEAR       
+  LIFETIME        
+}
+
+// Course lifecycle status
+enum CourseStatus {
+  DRAFT     
+  REVIEW    
+  PUBLISHED 
+  ARCHIVED  
+}
+
+// Course difficulty level
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+// Lecture content type
+enum LectureType {
+  VIDEO     
+  DOCUMENT  
+  TEXT      
+}
+
+// Order payment status
+enum OrderStatus {
+  PENDING    
+  COMPLETED  
+  FAILED     
+  REFUNDED   
+}
+
+// Coupon discount type
+enum DiscountType {
+  PERCENT  // e.g. 20% off
+  FLAT     // e.g. Rs 200 off
+}
+
+// Blog post status
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// ── V4 Enums ──────────────────────────────────────────────────
+
+enum EventType {
+  UPCOMING
+  PAST
+}
+
+enum EventMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum PricingType {
+  FREE
+  PAID
+}
+
+enum EventStatus {
+  DRAFT      // not visible to public
+  PUBLISHED  // visible + open for registration
+  CANCELLED  // shown as cancelled; registrations invalidated
+  ARCHIVED   // hidden from public listings
+}
+
+enum RegistrationStatus {
+  PENDING    // payment initiated but not confirmed
+  CONFIRMED  // free registration OR payment verified
+  CANCELLED  // registrant cancelled or event cancelled
+  REFUNDED   // paid ticket refunded by admin
+}
+
+enum NewsStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+//User
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  hashedPassword String?
+  image          String?
+  role           Role      @default(STUDENT)
+  isActive       Boolean   @default(true)
+  collegeId      String?
+  phoneNumber    String?
+  registrationNumber String?  @unique
+  rollNumber         String?  @unique
+  batchYear          Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  sessions                Session[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  college                 College? @relation(fields: [collegeId], references: [id])
+   authoredCourses  Course[]          @relation("AuthoredCourses")
+
+  enrolments       Enrolment[]
+  orders           Order[]
+  lectureProgress  LectureProgress[]
+  certificates     Certificate[]
+  blogPosts    BlogPost[]  @relation("BlogAuthor") 
+
+    
+  eventRegistrations EventRegistration[]
+  eventWaitlist      EventWaitlist[]
+  authoredEvents     Event[]             @relation("AuthoredEvents")
+  authoredNews       NewsArticle[]       @relation("AuthoredNews")
+
+
+  @@map("users")
+}
+
+
+
+model StudentCounter {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  lastCount Int      @default(0)
+
+  @@map("student_counters")
+}
+
+//Session
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+//Password Reset Token
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([email, token])
+  @@map("password_reset_tokens")
+}
+
+//Email Verification Token
+model EmailVerificationToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([email, token])
+  @@map("email_verification_tokens")
+}
+
+//College
+model College {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isOther   Boolean  @default(false)
+  city      String?
+  state     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  @@map("colleges")
+}
+
+// ── V3 Core Course Models ─────────────────────────────────────
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  image       String?  // UploadThing CDN URL
+  isActive    Boolean  @default(true)
+  displayOrder Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  courses Course[]
+
+  @@map("categories")
+}
+
+model Course {
+  id               String         @id @default(cuid())
+  title            String
+  slug             String         @unique
+  description      String?        // short tagline
+  about            String?        // long rich text (Tiptap)
+  thumbnail        String?        // UploadThing CDN URL
+  previewVideoUrl  String?        // free preview video URL
+  price            Int            // in paise — 0 = free
+  mrp              Int            @default(0) // strikethrough price
+  accessDuration   AccessDuration @default(THREE_MONTHS) // REQUIRED
+  status           CourseStatus   @default(DRAFT)
+  level            CourseLevel    @default(BEGINNER)
+  language         String         @default("Hindi")
+  totalDuration    Int            @default(0) // minutes — auto-calculated
+  totalLectures    Int            @default(0) // auto-calculated
+  isFeatured       Boolean        @default(false)
+  metaTitle        String?        // SEO
+  metaDescription  String?        // SEO
+
+  // Relations
+  categoryId  String
+  authorId    String  // CMS_EDITOR who created it
+
+  category    Category       @relation(fields: [categoryId], references: [id])
+  author      User           @relation("AuthoredCourses", fields: [authorId], references: [id])
+  sections    CourseSection[]
+  enrolments  Enrolment[]
+  orders      Order[]
+  coupons     Coupon[] 
+  certificates Certificate[]
+  faqs        CourseFaq[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("courses")
+}
+
+model CourseSection {
+  id           String   @id @default(cuid())
+  title        String
+  displayOrder Int      @default(0)
+
+  courseId String
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lectures Lecture[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("course_sections")
+}
+
+model Lecture {
+  id           String      @id @default(cuid())
+  title        String
+  type         LectureType @default(VIDEO)
+  videoUrl     String?     // UploadThing video URL
+  documentUrl  String?     // UploadThing PDF URL
+  textContent  String?     // Rich text for TEXT type
+  duration     Int         @default(0) // minutes
+  displayOrder Int         @default(0)
+  isPreview    Boolean     @default(false) // free preview without enrolment
+  isPublished  Boolean     @default(true)
+
+  sectionId String
+  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  progress LectureProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lectures")
+}
+
+model CourseFaq {
+  id           String  @id @default(cuid())
+  question     String
+  answer       String
+  displayOrder Int     @default(0)
+
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("course_faqs")
+}
+
+// ── V3 Certificate ────────────────────────────────────────────
+
+model Certificate {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  
+  // Certificate unique identifier — public verify URL mein use hoga
+  certificateNumber String @unique // e.g. "CERT-2025-0001"
+  
+  // Snapshot at time of issue — course title baad mein change ho sakta hai
+  courseTitle   String
+  studentName   String
+  issuedAt      DateTime @default(now())
+  
+  // PDF storage
+  pdfUrl        String?  // UploadThing ya generated URL
+  
+  // Important: Certificate accessible even after access expires
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Ek student ek course ka sirf ek certificate
+  @@unique([userId, courseId])
+  @@map("certificates")
+}
+
+// ── V3 Commerce Models ────────────────────────────────────────
+
+model Enrolment {
+  id               String         @id @default(cuid())
+  userId           String
+  courseId         String
+  accessDuration   AccessDuration
+  accessGrantedAt  DateTime       @default(now())
+  accessExpiresAt  DateTime?
+  renewedAt        DateTime?
+  completionPercent Int           @default(0)
+  completedAt       DateTime?
+  orderId          String?        @unique
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@map("enrolments")
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  userId        String
+  courseId      String
+  status        OrderStatus @default(PENDING)
+  amountPaid    Int
+  originalPrice Int
+  discountAmount Int        @default(0)
+  razorpayOrderId   String  @unique
+  razorpayPaymentId String? @unique
+  razorpaySignature String?
+  couponId       String?
+  accessDuration AccessDuration
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id])
+  coupon  Coupon? @relation(fields: [couponId], references: [id])
+
+  enrolment Enrolment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("orders")
+}
+
+model Coupon {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Int
+  validFrom     DateTime
+  validUntil    DateTime?
+  maxUses       Int?
+  usedCount     Int          @default(0)
+  isActive      Boolean      @default(true)
+  courseId      String?
+  minOrderValue Int          @default(0)
+
+  course Course? @relation(fields: [courseId], references: [id])
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("coupons")
+}
+
+model LectureProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  lectureId   String
+  isCompleted Boolean  @default(false)
+  watchedAt   DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lectureId])
+  @@map("lecture_progress")
+}
+
+
+// ── V3 CMS Content Models ─────────────────────────────────────
+
+model Banner {
+  id           String    @id @default(cuid())
+  imageUrl     String
+  altText      String
+  title        String?
+  subtitle     String?
+  buttonText   String?
+  buttonLink   String?
+  startDate    DateTime?
+  endDate      DateTime?
+  displayOrder Int       @default(0)
+  isActive     Boolean   @default(true)
+  
+  // Target page — home, courses, etc.
+  targetPage   String    @default("home")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("banners")
+}
+
+model Announcement {
+  id        String    @id @default(cuid())
+  title     String
+  content   String
+  type      String    @default("info") // info | warning | success
+  isActive  Boolean   @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  
+  // Target audience
+  targetRole String?  // null = all, "STUDENT", "FACULTY", etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("announcements")
+}
+
+model BlogPost {
+  id              String         @id @default(cuid())
+  title           String
+  slug            String         @unique
+  excerpt         String?        // short summary
+  content         String         // Tiptap rich text (HTML/JSON)
+  coverImage      String?        // UploadThing CDN URL
+  status          BlogPostStatus @default(DRAFT)
+  publishedAt     DateTime?
+  
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+
+  // Author
+  authorId String
+  author   User   @relation("BlogAuthor", fields: [authorId], references: [id])
+
+  // Tags (simple string array)
+  tags String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("blog_posts")
+}
+
+model StaticPage {
+  id              String   @id @default(cuid())
+  title           String
+  slug            String   @unique // about-us, contact, privacy-policy, terms
+  content         String   // Tiptap rich text
+  isPublished     Boolean  @default(false)
+  
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("static_pages")
+}
+
+model SeoSettings {
+  id                  String   @id @default("global")
+  siteTitleSuffix     String   @default("— MDSSC")
+  metaDescription     String   @default("")
+  ogImage             String?
+  googleAnalyticsId   String?
+  searchConsoleVerify String?
+  robotsIndex         Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+
+  @@map("seo_settings")
+}
+
+// ── V4 Models ─────────────────────────────────────────────────
+
+model Event {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  description String?     // short summary max 300 chars — shown on cards
+  content     String?     // full rich text body (HTML)
+  coverImage  String?     // UploadThing CDN URL
+
+  // Classification
+  eventType   EventType   // UPCOMING | PAST
+  mode        EventMode   // ONLINE | OFFLINE | HYBRID
+  status      EventStatus @default(DRAFT)
+  isFeatured  Boolean     @default(false)
+
+  // Logistics
+  venue       String?     // physical address — OFFLINE / HYBRID
+  joinLink    String?     // meeting URL — ONLINE / HYBRID — hidden until registration
+  startDate   DateTime
+  endDate     DateTime?
+  timezone    String      @default("Asia/Kolkata")
+
+  // Capacity
+  capacity        Int?     // null = unlimited
+  registeredCount Int      @default(0)
+  waitlistEnabled Boolean  @default(false)
+  waitlistCount   Int      @default(0)
+
+  // Pricing
+  pricingType PricingType // FREE | PAID
+  price       Int         @default(0) // paise mein; 0 for FREE
+
+  // Cancellation
+  refundPolicy         String?
+  cancellationDeadline DateTime?
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  tags            String[]
+
+  // Relations
+  authorId        String
+  author          User                @relation("AuthoredEvents", fields: [authorId], references: [id])
+  registrations   EventRegistration[]
+  waitlistEntries EventWaitlist[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("events")
+}
+
+model EventRegistration {
+  id      String @id @default(cuid())
+  eventId String
+
+  // Registrant — either platform user OR guest (never both)
+  userId     String? // null if guest
+  guestName  String? // required if userId is null
+  guestEmail String? // required if userId is null
+  guestPhone String? // required if userId is null
+
+  // Status
+  status RegistrationStatus @default(PENDING)
+
+  // QR Ticket
+  ticketCode  String   @unique @default(cuid())
+  checkedIn   Boolean  @default(false)
+  checkedInAt DateTime?
+
+  // Payment — only for PAID events
+  amountPaid        Int?
+  razorpayOrderId   String? @unique
+  razorpayPaymentId String? @unique
+  razorpaySignature String?
+
+  registeredAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One registration per user per event
+  @@unique([eventId, userId])
+  @@map("event_registrations")
+}
+
+model EventWaitlist {
+  id      String @id @default(cuid())
+  eventId String
+
+  // Same pattern as EventRegistration
+  userId     String?
+  guestName  String?
+  guestEmail String?
+  guestPhone String?
+
+  position Int      // queue position
+  notified Boolean  @default(false) // email sent when spot opened
+  joinedAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_waitlist")
+}
+
+model NewsArticle {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  excerpt     String?    // short summary for cards and SEO
+  content     String     // rich text HTML
+  coverImage  String?    // UploadThing CDN URL
+  status      NewsStatus @default(DRAFT)
+  isFeatured  Boolean    @default(false) // homepage slider priority
+  publishedAt DateTime?
+  tags        String[]
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+
+  authorId String
+  author   User   @relation("AuthoredNews", fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("news_articles")
+}
+
