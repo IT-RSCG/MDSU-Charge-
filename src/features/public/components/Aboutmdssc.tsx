@@ -6,7 +6,7 @@ const stats = [
   { value: "9+", label: "Core verticals" },
   { value: "1st", label: "In the state" },
   { value: "100%", label: "Atmanirbhar focus" },
-  { value: "IPR", label: "Dedicated cell" },
+  { value: "IPR", label: "Dedicated" },
 ];
 
 const features = [
