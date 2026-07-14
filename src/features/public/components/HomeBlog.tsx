@@ -73,7 +73,7 @@ export async function HomeBlog() {
                 lineHeight: 1.2,
               }}
             >
-              News & Insights
+              Blogs & Insights
             </h2>
             <p
               style={{
